@@ -1,0 +1,305 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b1220;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel2: rgba(255, 255, 255, 0.09);
+  --border: rgba(255, 255, 255, 0.12);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.65);
+  --accent: #60a5fa;
+  --danger: #ef4444;
+  --ok: #22c55e;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: radial-gradient(1200px 800px at 10% 10%, rgba(96, 165, 250, 0.12), transparent 40%),
+    radial-gradient(1000px 700px at 90% 0%, rgba(168, 85, 247, 0.1), transparent 45%),
+    radial-gradient(800px 700px at 50% 100%, rgba(34, 197, 94, 0.08), transparent 55%),
+    var(--bg);
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.layout {
+  min-height: 100%;
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 16px;
+  padding: 16px;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: linear-gradient(180deg, var(--panel), transparent);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  backdrop-filter: blur(10px);
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.row > * {
+  flex: 1;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.input {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+}
+
+.btn {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, var(--panel2), rgba(255, 255, 255, 0.02));
+  color: var(--text);
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.canvasWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 32px);
+}
+
+.canvasCard {
+  width: min(860px, 100%);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+}
+
+.canvasCard.turnTheme {
+  --player-color: #60a5fa;
+  --player-color-soft: rgba(96, 165, 250, 0.22);
+  --player-color-soft2: rgba(96, 165, 250, 0.14);
+  background:
+    radial-gradient(520px 360px at 50% 45%, var(--player-color-soft), transparent 60%),
+    radial-gradient(760px 520px at 50% 55%, var(--player-color-soft2), transparent 65%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border-color: color-mix(in srgb, var(--player-color) 40%, var(--border));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--player-color) 26%, transparent),
+    0 0 34px 4px color-mix(in srgb, var(--player-color) 18%, transparent);
+  transition: background 420ms ease, border-color 420ms ease, box-shadow 420ms ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.canvasCard.turnTheme::before {
+  content: "";
+  position: absolute;
+  inset: -40px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--player-color) 22%, transparent), transparent 65%);
+  filter: blur(18px);
+  opacity: 0.55;
+  animation: turnPulse 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes turnPulse {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 0.72;
+  }
+  100% {
+    transform: scale(0.98);
+    opacity: 0.45;
+  }
+}
+
+.canvasCard.turnTheme.turnFlash {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--player-color) 36%, transparent),
+    0 0 48px 8px color-mix(in srgb, var(--player-color) 26%, transparent);
+}
+
+.turnOverlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.turnWatermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 92%;
+  text-align: center;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: clamp(54px, 8.5vw, 140px);
+  line-height: 0.95;
+  color: color-mix(in srgb, var(--player-color) 88%, white);
+  opacity: 0.075;
+  filter: blur(0.3px);
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.25),
+    0 0 26px color-mix(in srgb, var(--player-color) 22%, transparent);
+  pointer-events: none;
+  z-index: 0;
+  animation: turnWatermarkFade 520ms ease both;
+}
+
+@keyframes turnWatermarkFade {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.985);
+  }
+  to {
+    opacity: 0.075;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.turnOverlayBackdrop {
+  position: absolute;
+  width: min(680px, 92%);
+  height: 120px;
+  border-radius: 18px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--player-color) 20%, transparent), transparent 70%);
+  filter: blur(10px);
+  opacity: 0.85;
+}
+
+.turnOverlayText {
+  position: relative;
+  font-size: clamp(22px, 4.3vw, 40px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--player-color) 92%, white);
+  text-shadow:
+    0 2px 0 rgba(0, 0, 0, 0.35),
+    0 0 18px color-mix(in srgb, var(--player-color) 55%, transparent),
+    0 0 44px color-mix(in srgb, var(--player-color) 28%, transparent);
+  animation: turnOverlayInOut 1850ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+}
+
+@keyframes turnOverlayInOut {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.9);
+  }
+  12% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(0) scale(1.01);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(6px) scale(1.05);
+  }
+}
+
+.canvasCard.turnTheme > * {
+  position: relative;
+  z-index: 1;
+}
+
+.chatBox {
+  height: 240px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.chatMsg {
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0 0 8px;
+}
+
+.chatMeta {
+  color: var(--muted);
+  margin-right: 6px;
+}
+
