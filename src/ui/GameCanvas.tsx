@@ -224,10 +224,11 @@ export function GameCanvas(props: Props) {
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const rect = el.getBoundingClientRect();
-      // Square board that fits its container (responsive)
-      const s = Math.floor(Math.min(rect.width, rect.height));
-      const ss = Math.max(240, s);
-      setSize({ w: ss, h: ss });
+      // Match the stage size exactly (stage already enforces grid aspect ratio).
+      // Flooring avoids fractional pixels that can cause subtle clipping.
+      const w = Math.max(240, Math.floor(rect.width));
+      const h = Math.max(240, Math.floor(rect.height));
+      setSize({ w, h });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -579,9 +580,9 @@ export function GameCanvas(props: Props) {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const pad = 16;
-    const boardW = size.w - pad * 2;
-    const boardH = size.h - pad * 2;
+    const pad = Math.max(10, Math.floor(Math.min(size.w, size.h) * 0.02));
+    const boardW = Math.floor(size.w - pad * 2);
+    const boardH = Math.floor(size.h - pad * 2);
     if (x < pad || y < pad || x > pad + boardW || y > pad + boardH) return;
 
     const col = Math.floor(((x - pad) / boardW) * props.state.cols);
@@ -600,7 +601,7 @@ export function GameCanvas(props: Props) {
       <div className="boardStage" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          style={{ touchAction: "manipulation", display: "block", width: "100%", height: "100%" }}
+          style={{ touchAction: "manipulation", display: "flex", flexWrap: "wrap", width: "100%", height: "100%" }}
           onPointerDown={handlePointer}
         />
       </div>

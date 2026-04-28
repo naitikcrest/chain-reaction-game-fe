@@ -37,6 +37,7 @@ export function App() {
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const playersAccordionRef = useRef<HTMLDetailsElement | null>(null);
   const chatAccordionRef = useRef<HTMLDetailsElement | null>(null);
+  const topBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function onState(payload: { state: GameState }) {
@@ -100,6 +101,18 @@ export function App() {
   }, [turnColor]);
 
   const isMobile = useMediaQuery("(max-width: 767px)");
+  const boardCols = state?.cols ?? 6;
+  const boardRows = state?.rows ?? 9;
+  const boardAspect = `${boardCols} / ${boardRows}`;
+  // Compute an optimal board width for *all* screen sizes (mobile/tablet/desktop).
+  // This makes the grid as large as possible without clipping.
+  const boardWidthPx = useBoardWidthPx({
+    headerRef: topBarRef,
+    cols: boardCols,
+    rows: boardRows,
+    sidebarPx: isMobile ? 0 : 412,
+    bottomUiPx: isMobile ? 118 : 32
+  });
 
   // Turn overlay on actual turn changes (prevents spam).
   useEffect(() => {
@@ -309,7 +322,7 @@ export function App() {
   return (
     <div className={`layout ${isDrawerOpen ? "drawerOpen" : ""}`}>
       {isMobile ? (
-        <div className="mobileTopBar">
+        <div className="mobileTopBar" ref={topBarRef}>
           <button className="iconBtn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
             ☰
           </button>
@@ -443,7 +456,14 @@ export function App() {
       ) : null}
 
       <div className="canvasWrap">
-        <div className={`canvasCard ${turnColor ? "turnTheme" : ""} ${turnFlash ? "turnFlash" : ""}`} style={themeVars}>
+        <div
+          className={`canvasCard ${turnColor ? "turnTheme" : ""} ${turnFlash ? "turnFlash" : ""}`}
+          style={{
+            ...themeVars,
+            ["--board-aspect" as string]: boardAspect,
+            ...(boardWidthPx ? { width: `${boardWidthPx}px` } : null)
+          }}
+        >
           {turnWatermarkText ? (
             <div key={`wm-${turnOverlayToken}`} className="turnWatermark" aria-hidden="true">
               {turnWatermarkText}
@@ -533,6 +553,69 @@ function useMediaQuery(query: string) {
     return () => mql.removeEventListener("change", onChange);
   }, [query]);
   return matches;
+}
+
+function useBoardWidthPx(opts: {
+  headerRef?: React.RefObject<HTMLElement | null>;
+  cols: number;
+  rows: number;
+  sidebarPx: number;
+  bottomUiPx: number;
+}) {
+  const [width, setWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    let t: number | null = null;
+
+    const recalc = () => {
+      const vv = window.visualViewport;
+      const vw = Math.floor(vv?.width ?? window.innerWidth);
+      const vh = Math.floor(vv?.height ?? window.innerHeight);
+
+      // Fit board by aspect ratio inside available viewport space.
+      const headerHeight = Math.ceil(opts.headerRef?.current?.getBoundingClientRect().height ?? 0);
+      const layoutPad = 32; // layout padding/gap safety
+      const availableWidth = Math.max(0, vw - opts.sidebarPx - layoutPad);
+      const availableHeight = Math.max(0, vh - headerHeight - opts.bottomUiPx - layoutPad);
+
+      const ratio = opts.cols / Math.max(1, opts.rows); // width/height
+      // Max width that fits both width and height constraints.
+      const maxWFromH = Math.floor(availableHeight * ratio);
+      const maxW = Math.floor(Math.min(availableWidth, maxWFromH) * 0.98);
+      const clampedW = clampNumber(240, maxW, 1400);
+
+      // Pixel-perfect fit: ensure width maps to an integer cell size (avoid rounding cut-off).
+      const cellPx = Math.max(1, Math.floor(clampedW / opts.cols));
+      const finalW = cellPx * opts.cols;
+      setWidth(finalW);
+
+      // Debug (uncomment if needed)
+      // console.log({ vw, vh, availableWidth, availableHeight, boardW: finalW, cellPx });
+    };
+
+    const debounced = () => {
+      if (t) window.clearTimeout(t);
+      t = window.setTimeout(recalc, 100);
+    };
+
+    recalc();
+    window.addEventListener("resize", debounced);
+    window.addEventListener("orientationchange", debounced);
+    window.visualViewport?.addEventListener("resize", debounced);
+
+    return () => {
+      window.removeEventListener("resize", debounced);
+      window.removeEventListener("orientationchange", debounced);
+      window.visualViewport?.removeEventListener("resize", debounced);
+      if (t) window.clearTimeout(t);
+    };
+  }, [opts.cols, opts.rows, opts.sidebarPx, opts.bottomUiPx, opts.headerRef]);
+
+  return width;
+}
+
+function clampNumber(min: number, v: number, max: number) {
+  return Math.max(min, Math.min(max, v));
 }
 
 function hexToRgba(hex: string, alpha: number) {
