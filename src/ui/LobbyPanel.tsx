@@ -1,4 +1,4 @@
-import type { GameState } from "@chain-reaction/shared";
+import type { GameState } from "../shared/types";
 import React from "react";
 
 export function LobbyPanel(props: {

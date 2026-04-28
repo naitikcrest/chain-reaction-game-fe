@@ -25,12 +25,18 @@ export function App() {
   const [turnOverlayToken, setTurnOverlayToken] = useState(0);
   const [turnOverlay, setTurnOverlay] = useState<{ text: string; color: string } | null>(null);
   const [turnFlash, setTurnFlash] = useState(false);
+  const [isDrawerOpen, setDrawerOpen] = useState(false);
+  const [isFabOpen, setFabOpen] = useState(false);
 
   const lastEventsAtRef = useRef<number>(0);
   const stateRef = useRef<GameState | null>(null);
   const lastTurnPlayerIdRef = useRef<string | null>(null);
   const overlayTimeoutRef = useRef<number | null>(null);
   const flashTimeoutRef = useRef<number | null>(null);
+  const drawerRef = useRef<HTMLDivElement | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const playersAccordionRef = useRef<HTMLDetailsElement | null>(null);
+  const chatAccordionRef = useRef<HTMLDetailsElement | null>(null);
 
   useEffect(() => {
     function onState(payload: { state: GameState }) {
@@ -93,6 +99,8 @@ export function App() {
     } as React.CSSProperties;
   }, [turnColor]);
 
+  const isMobile = useMediaQuery("(max-width: 767px)");
+
   // Turn overlay on actual turn changes (prevents spam).
   useEffect(() => {
     if (!state || state.status !== "playing") return;
@@ -123,78 +131,316 @@ export function App() {
     flashTimeoutRef.current = window.setTimeout(() => setTurnFlash(false), 650);
   }, [state?.currentPlayerIdx, state?.status]);
 
-  return (
-    <div className="layout">
-      <div className="panel">
-        <h2>Room</h2>
-        <LobbyPanel
-          myName={myName}
-          roomId={roomId}
-          state={state}
-          error={error}
-          onMyNameChange={(v) => setMyName(v)}
-          onRoomIdChange={(v) => setRoomId(v)}
-          onCreate={() => {
-            setError(null);
-            socket.emit("room:create", { name: myName || "Player" }, (res) => {
-              if (!res.ok) return setError(res.reason);
-              setRoomId(res.roomId);
-              setMyPlayerId(res.playerId);
-              setState(res.state);
-              setChat([]);
-            });
-          }}
-          onJoin={() => {
-            setError(null);
-            socket.emit("room:join", { roomId, name: myName || "Player" }, (res) => {
-              if (!res.ok) return setError(res.reason);
-              setMyPlayerId(res.playerId);
-              setState(res.state);
-              setChat([]);
-            });
-          }}
-          onStart={() => {
+  // Close drawer on route state changes / join / start, etc (small UX nicety).
+  useEffect(() => {
+    if (!isMobile) setDrawerOpen(false);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) setFabOpen(false);
+  }, [isMobile]);
+
+  // Drawer: ESC to close + focus trap.
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+    closeBtnRef.current?.focus();
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setDrawerOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const root = drawerRef.current;
+      if (!root) return;
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
+      if (focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+      if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [isDrawerOpen]);
+
+  // Swipe-to-close (optional): swipe left on drawer panel.
+  useEffect(() => {
+    if (!isDrawerOpen) return;
+    const el = drawerRef.current;
+    if (!el) return;
+    let startX = 0;
+    let startY = 0;
+    let active = false;
+
+    function onTouchStart(e: TouchEvent) {
+      const t = e.touches[0];
+      if (!t) return;
+      startX = t.clientX;
+      startY = t.clientY;
+      active = true;
+    }
+    function onTouchMove(e: TouchEvent) {
+      if (!active) return;
+      const t = e.touches[0];
+      if (!t) return;
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (Math.abs(dy) > 60) active = false;
+      if (dx < -70) {
+        active = false;
+        setDrawerOpen(false);
+      }
+    }
+    function onTouchEnd() {
+      active = false;
+    }
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [isDrawerOpen]);
+
+  const sidebarContent = (
+    <>
+      <h2>Room</h2>
+      <LobbyPanel
+        myName={myName}
+        roomId={roomId}
+        state={state}
+        error={error}
+        onMyNameChange={(v) => setMyName(v)}
+        onRoomIdChange={(v) => setRoomId(v)}
+        onCreate={() => {
+          setError(null);
+          socket.emit("room:create", { name: myName || "Player" }, (res) => {
+            if (!res.ok) return setError(res.reason);
+            setRoomId(res.roomId);
+            setMyPlayerId(res.playerId);
+            setState(res.state);
+            setChat([]);
+            setDrawerOpen(false);
+          });
+        }}
+        onJoin={() => {
+          setError(null);
+          socket.emit("room:join", { roomId, name: myName || "Player" }, (res) => {
+            if (!res.ok) return setError(res.reason);
+            setMyPlayerId(res.playerId);
+            setState(res.state);
+            setChat([]);
+            setDrawerOpen(false);
+          });
+        }}
+        onStart={() => {
+          if (!state) return;
+          socket.emit("game:start", { roomId: state.roomId }, (res) => {
+            if (!res.ok) setError(res.reason);
+            setDrawerOpen(false);
+          });
+        }}
+        onRestart={() => {
+          if (!state) return;
+          socket.emit("game:restart", { roomId: state.roomId }, (res) => {
+            if (!res.ok) setError(res.reason);
+            setDrawerOpen(false);
+          });
+        }}
+      />
+
+      <SidePanel
+        state={state}
+        myPlayerId={myPlayerId}
+        leaderboard={leaderboard}
+        fastForward={fastForward}
+        onFastForwardChange={setFastForward}
+        canReplay={canReplay}
+        onReplayLast={() => setReplayToken((x) => x + 1)}
+      />
+
+      <div className="stack">
+        <h2>Chat</h2>
+        <ChatPanel
+          disabled={!state || !myPlayerId}
+          chat={chat}
+          onSend={(message) => {
             if (!state) return;
-            socket.emit("game:start", { roomId: state.roomId }, (res) => {
-              if (!res.ok) setError(res.reason);
-            });
-          }}
-          onRestart={() => {
-            if (!state) return;
-            socket.emit("game:restart", { roomId: state.roomId }, (res) => {
+            socket.emit("chat:send", { roomId: state.roomId, message }, (res) => {
               if (!res.ok) setError(res.reason);
             });
           }}
         />
-
-        <SidePanel
-          state={state}
-          myPlayerId={myPlayerId}
-          leaderboard={leaderboard}
-          fastForward={fastForward}
-          onFastForwardChange={setFastForward}
-          canReplay={canReplay}
-          onReplayLast={() => setReplayToken((x) => x + 1)}
-        />
-
-        <div className="stack">
-          <h2>Chat</h2>
-          <ChatPanel
-            disabled={!state || !myPlayerId}
-            chat={chat}
-            onSend={(message) => {
-              if (!state) return;
-              socket.emit("chat:send", { roomId: state.roomId, message }, (res) => {
-                if (!res.ok) setError(res.reason);
-              });
-            }}
-          />
-        </div>
-
-        <div className="hint" style={{ marginTop: 12 }}>
-          Tip: share the room id with friends. Server is authoritative and broadcasts state after every move.
-        </div>
       </div>
+
+      <div className="hint" style={{ marginTop: 12 }}>
+        Tip: share the room id with friends. Server is authoritative and broadcasts state after every move.
+      </div>
+    </>
+  );
+
+  function openDrawerSection(section: "players" | "chat") {
+    setDrawerOpen(true);
+    setFabOpen(false);
+    window.setTimeout(() => {
+      const el = section === "players" ? playersAccordionRef.current : chatAccordionRef.current;
+      if (!el) return;
+      el.open = true;
+      el.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 80);
+  }
+
+  return (
+    <div className={`layout ${isDrawerOpen ? "drawerOpen" : ""}`}>
+      {isMobile ? (
+        <div className="mobileTopBar">
+          <button className="iconBtn" onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+            ☰
+          </button>
+          <div className="mobileTopBarCenter">
+            {state?.status === "playing" ? (
+              <span className="pill" style={{ borderColor: turnColor ?? "var(--border)" }}>
+                <span className="dot" style={{ background: turnColor ?? "transparent" }} />
+                <span style={{ fontWeight: 750 }}>{currentPlayer?.name ?? "-"}</span>
+                <span style={{ color: "var(--muted)" }}>turn</span>
+              </span>
+            ) : (
+              <span className="hint">{state ? `Status: ${state.status}` : "Create or join a room"}</span>
+            )}
+          </div>
+          <button className="iconBtn" onClick={() => setDrawerOpen((v) => !v)} aria-label="Toggle menu">
+            ⋯
+          </button>
+        </div>
+      ) : (
+        <div className="panel sidebarDesktop">{sidebarContent}</div>
+      )}
+
+      {isMobile ? (
+        <>
+          <div
+            className={`drawerBackdrop ${isDrawerOpen ? "open" : ""}`}
+            onMouseDown={() => setDrawerOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            className={`drawerPanel ${isDrawerOpen ? "open" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Menu"
+            ref={drawerRef}
+          >
+            <div className="drawerHeader">
+              <div className="drawerTitle">Menu</div>
+              <button className="iconBtn" onClick={() => setDrawerOpen(false)} aria-label="Close menu" ref={closeBtnRef}>
+                ✕
+              </button>
+            </div>
+
+            <div className="drawerScroll">
+              <details className="accordion" open>
+                <summary>Room</summary>
+                <div className="accordionBody">
+                  <LobbyPanel
+                    myName={myName}
+                    roomId={roomId}
+                    state={state}
+                    error={error}
+                    onMyNameChange={(v) => setMyName(v)}
+                    onRoomIdChange={(v) => setRoomId(v)}
+                    onCreate={() => {
+                      setError(null);
+                      socket.emit("room:create", { name: myName || "Player" }, (res) => {
+                        if (!res.ok) return setError(res.reason);
+                        setRoomId(res.roomId);
+                        setMyPlayerId(res.playerId);
+                        setState(res.state);
+                        setChat([]);
+                        setDrawerOpen(false);
+                      });
+                    }}
+                    onJoin={() => {
+                      setError(null);
+                      socket.emit("room:join", { roomId, name: myName || "Player" }, (res) => {
+                        if (!res.ok) return setError(res.reason);
+                        setMyPlayerId(res.playerId);
+                        setState(res.state);
+                        setChat([]);
+                        setDrawerOpen(false);
+                      });
+                    }}
+                    onStart={() => {
+                      if (!state) return;
+                      socket.emit("game:start", { roomId: state.roomId }, (res) => {
+                        if (!res.ok) setError(res.reason);
+                        setDrawerOpen(false);
+                      });
+                    }}
+                    onRestart={() => {
+                      if (!state) return;
+                      socket.emit("game:restart", { roomId: state.roomId }, (res) => {
+                        if (!res.ok) setError(res.reason);
+                        setDrawerOpen(false);
+                      });
+                    }}
+                  />
+                </div>
+              </details>
+
+              <details className="accordion" open ref={playersAccordionRef}>
+                <summary>Players / Leaderboard / Animation</summary>
+                <div className="accordionBody">
+                  <SidePanel
+                    state={state}
+                    myPlayerId={myPlayerId}
+                    leaderboard={leaderboard}
+                    fastForward={fastForward}
+                    onFastForwardChange={setFastForward}
+                    canReplay={canReplay}
+                    onReplayLast={() => setReplayToken((x) => x + 1)}
+                  />
+                </div>
+              </details>
+
+              <details className="accordion" open ref={chatAccordionRef}>
+                <summary>Chat</summary>
+                <div className="accordionBody">
+                  <ChatPanel
+                    disabled={!state || !myPlayerId}
+                    chat={chat}
+                    onSend={(message) => {
+                      if (!state) return;
+                      socket.emit("chat:send", { roomId: state.roomId, message }, (res) => {
+                        if (!res.ok) setError(res.reason);
+                      });
+                    }}
+                  />
+                </div>
+              </details>
+
+              <div className="hint" style={{ marginTop: 8 }}>
+                Tap outside or press ESC to close.
+              </div>
+            </div>
+          </div>
+        </>
+      ) : null}
 
       <div className="canvasWrap">
         <div className={`canvasCard ${turnColor ? "turnTheme" : ""} ${turnFlash ? "turnFlash" : ""}`} style={themeVars}>
@@ -236,8 +482,57 @@ export function App() {
           />
         </div>
       </div>
+
+      {/* Mobile floating quick actions */}
+      {isMobile ? (
+        <div className="fabWrap" aria-label="Quick actions">
+          <div className={`fabMenu ${isFabOpen ? "open" : ""}`}>
+            <button
+              className="fabItem"
+              disabled={!state}
+              onClick={() => {
+                if (!state) return;
+                setFabOpen(false);
+                socket.emit("game:restart", { roomId: state.roomId }, (res) => {
+                  if (!res.ok) setError(res.reason);
+                });
+              }}
+            >
+              Restart
+            </button>
+            <button className="fabItem" onClick={() => openDrawerSection("chat")}>
+              Chat
+            </button>
+            <button className="fabItem" onClick={() => openDrawerSection("players")}>
+              Players
+            </button>
+          </div>
+          <button
+            className={`fabMain ${isFabOpen ? "open" : ""}`}
+            onClick={() => setFabOpen((v) => !v)}
+            aria-expanded={isFabOpen}
+            aria-label="Open quick actions"
+          >
+            {isFabOpen ? "×" : "+"}
+          </button>
+          {state ? <div className="fabHint">{state.players.length} players</div> : null}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
 }
 
 function hexToRgba(hex: string, alpha: number) {

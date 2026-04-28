@@ -68,6 +68,8 @@ export function GameCanvas(props: Props) {
     return { rows, cols };
   }, [props.state?.rows, props.state?.cols]);
 
+  const DEBUG_CELL_BORDERS = false;
+
   // Capture authoritative grid for smooth transitions / resets.
   useEffect(() => {
     if (!props.state) {
@@ -222,9 +224,10 @@ export function GameCanvas(props: Props) {
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const rect = el.getBoundingClientRect();
-      const w = Math.floor(rect.width);
-      const h = Math.floor(Math.min(rect.width * 0.66, window.innerHeight - 140));
-      setSize({ w: Math.max(420, w), h: Math.max(360, h) });
+      // Square board that fits its container (responsive)
+      const s = Math.floor(Math.min(rect.width, rect.height));
+      const ss = Math.max(240, s);
+      setSize({ w: ss, h: ss });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -273,19 +276,23 @@ export function GameCanvas(props: Props) {
   }, [props.lastEventsAt, props.state]);
 
   function draw(ctx: CanvasRenderingContext2D) {
-    const w = canvasRef.current?.width ?? 1;
-    const h = canvasRef.current?.height ?? 1;
-    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+    // High-DPI correctness: canvas width/height are already multiplied by DPR.
+    // Use DPR transform but clear using CSS-pixel coordinates to avoid clipping.
+    const dpr = devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.w, size.h);
 
     const rows = dims.rows;
     const cols = dims.cols;
-    const pad = 16;
-    const boardW = size.w - pad * 2;
-    const boardH = size.h - pad * 2;
+    const pad = Math.max(10, Math.floor(Math.min(size.w, size.h) * 0.02));
+    const boardW = Math.floor(size.w - pad * 2);
+    const boardH = Math.floor(size.h - pad * 2);
     const cellW = boardW / cols;
     const cellH = boardH / rows;
-    const radius = Math.min(cellW, cellH) * 0.18;
+    const cellSize = Math.min(cellW, cellH);
+    // Keep orbs fully inside the cell.
+    // Requirement: orbSize (diameter) = cellSize * 0.3 => radius = cellSize * 0.15
+    const orbR = cellSize * 0.15;
     // Smooth orbit rotation: ~3s per full turn (within 2–4s requirement)
     const orbitPeriodMs = 3000;
     const orbitOmega = (Math.PI * 2) / orbitPeriodMs;
@@ -297,6 +304,8 @@ export function GameCanvas(props: Props) {
 
     const now = performance.now();
     const state = props.state;
+    const isSmallScreen = Math.min(size.w, size.h) < 420;
+    const particleStride = isSmallScreen ? 2 : 1; // performance: draw fewer particles on small screens
 
     // Apply scheduled animation actions.
     const scheduleElapsed = now - scheduleStartAtRef.current;
@@ -333,6 +342,18 @@ export function GameCanvas(props: Props) {
       ctx.moveTo(x, pad);
       ctx.lineTo(x, pad + boardH);
       ctx.stroke();
+    }
+
+    if (DEBUG_CELL_BORDERS) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,0,0,0.55)";
+      ctx.lineWidth = 1;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          ctx.strokeRect(pad + c * cellW, pad + r * cellH, cellW, cellH);
+        }
+      }
+      ctx.restore();
     }
 
     // Turn highlight
@@ -395,8 +416,10 @@ export function GameCanvas(props: Props) {
 
         // Extra local shake when near bursting (in addition to event bounce).
         const preBurstShake = nearBurst ? (0.75 + 0.25 * Math.sin(now / 60)) : 0;
-        const psx = preBurstShake > 0 ? Math.sin(now / 13 + r * 1.7 + c * 2.1) * 1.8 * preBurstShake : 0;
-        const psy = preBurstShake > 0 ? Math.cos(now / 11 + r * 1.2 + c * 2.7) * 1.8 * preBurstShake : 0;
+        const psxRaw = preBurstShake > 0 ? Math.sin(now / 13 + r * 1.7 + c * 2.1) * 1.8 * preBurstShake : 0;
+        const psyRaw = preBurstShake > 0 ? Math.cos(now / 11 + r * 1.2 + c * 2.7) * 1.8 * preBurstShake : 0;
+        const psx = clamp(psxRaw, -orbR * 0.35, orbR * 0.35);
+        const psy = clamp(psyRaw, -orbR * 0.35, orbR * 0.35);
 
         // Soft glow -> intense glow as it nears explosion
         const glow = 0.18 + 1.25 * energy + 0.35 * (1 - pulse);
@@ -409,7 +432,7 @@ export function GameCanvas(props: Props) {
 
         // Energy aura (cheap, looks great): faint radial glow behind the orbs.
         {
-          const auraR = Math.min(cellW, cellH) * (0.18 + 0.22 * energy);
+        const auraR = cellSize * (0.18 + 0.22 * energy);
           const grad = ctx.createRadialGradient(cx + psx, cy + psy, 1, cx + psx, cy + psy, auraR);
           grad.addColorStop(0, withAlpha(color, 0.22 + 0.22 * energy));
           grad.addColorStop(1, withAlpha(color, 0));
@@ -422,22 +445,28 @@ export function GameCanvas(props: Props) {
           ctx.restore();
         }
 
+        const safeDist = Math.max(0, cellSize / 2 - orbR * 1.05);
+        const d1 = 0;
+        const d2 = safeDist * 0.62;
+        const d3 = safeDist * 0.68;
+        const d4x = safeDist * 0.6;
+        const d4y = safeDist * 0.6;
         const basePositions: Array<[number, number]> =
           count === 1
-            ? [[0, 0]]
+            ? [[d1, d1]]
             : count === 2
-              ? [[-radius * 0.82, 0], [radius * 0.82, 0]]
+              ? [[-d2, 0], [d2, 0]]
               : count === 3
                 ? [
-                    [0, -radius * 0.88],
-                    [-radius * 0.82, radius * 0.7],
-                    [radius * 0.82, radius * 0.7]
+                    [0, -d3],
+                    [-d3 * 0.86, d3 * 0.74],
+                    [d3 * 0.86, d3 * 0.74]
                   ]
                 : [
-                    [-radius * 0.82, -radius * 0.72],
-                    [radius * 0.82, -radius * 0.72],
-                    [-radius * 0.82, radius * 0.72],
-                    [radius * 0.82, radius * 0.72]
+                    [-d4x, -d4y],
+                    [d4x, -d4y],
+                    [-d4x, d4y],
+                    [d4x, d4y]
                   ];
 
         // Rotate/orbit each orb smoothly with slight per-orb phase offset so
@@ -456,7 +485,7 @@ export function GameCanvas(props: Props) {
           ctx.arc(
             cx + dx + sx + psx,
             cy + dy + sy + psy,
-            radius * (0.98 + 0.18 * (1 - pulse)) * pulseScale * energyScale,
+            orbR * (0.98 + 0.18 * (1 - pulse)) * pulseScale * energyScale,
             0,
             Math.PI * 2
           );
@@ -469,9 +498,9 @@ export function GameCanvas(props: Props) {
           ctx.fillStyle = "rgba(255,255,255,0.85)";
           ctx.beginPath();
           ctx.arc(
-            cx + dx + sx + psx - radius * 0.18,
-            cy + dy + sy + psy - radius * 0.18,
-            radius * 0.33,
+            cx + dx + sx + psx - orbR * 0.18,
+            cy + dy + sy + psy - orbR * 0.18,
+            orbR * 0.33,
             0,
             Math.PI * 2
           );
@@ -484,13 +513,19 @@ export function GameCanvas(props: Props) {
 
     // Draw traveling particles toward neighbors.
     const remaining: Particle[] = [];
-    for (const part of particlesRef.current) {
+    for (let idx = 0; idx < particlesRef.current.length; idx++) {
+      const part = particlesRef.current[idx]!;
       const t = (now - part.startAt) / part.durationMs;
       if (t < 0) {
         remaining.push(part);
         continue;
       }
       if (t >= 1) continue;
+      if (particleStride > 1 && idx % particleStride !== 0) {
+        // still keep particle alive, just skip drawing this frame
+        remaining.push(part);
+        continue;
+      }
 
       const from = cellCenter(part.from.row, part.from.col, pad, cellW, cellH, boardShakeX, boardShakeY);
       const to = cellCenter(part.to.row, part.to.col, pad, cellW, cellH, boardShakeX, boardShakeY);
@@ -510,11 +545,11 @@ export function GameCanvas(props: Props) {
 
       ctx.save();
       ctx.shadowColor = part.color;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = isSmallScreen ? 8 : 12;
       ctx.globalAlpha = 0.9 * (1 - t * 0.4);
       ctx.fillStyle = part.color;
       ctx.beginPath();
-      ctx.arc(x, y, radius * (0.55 + 0.25 * Math.sin(now / 120)), 0, Math.PI * 2);
+      ctx.arc(x, y, orbR * (0.55 + 0.25 * Math.sin(now / 120)), 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
 
@@ -551,25 +586,32 @@ export function GameCanvas(props: Props) {
 
     const col = Math.floor(((x - pad) / boardW) * props.state.cols);
     const row = Math.floor(((y - pad) / boardH) * props.state.rows);
+
+    // Touch feedback: pop the tapped cell immediately (before server ack).
+    const now = performance.now();
+    animRef.current.set(`${row},${col}`, { pulseUntil: now + 180, shakeUntil: now + 90 });
+
     playPlace();
     props.onCellClick(row, col);
   }
 
   return (
-    <div ref={wrapRef}>
-      <canvas
-        ref={canvasRef}
-        style={{ touchAction: "manipulation", display: "block", width: "100%" }}
-        onPointerDown={handlePointer}
-      />
-      <div className="hint" style={{ marginTop: 10 }}>
+    <>
+      <div className="boardStage" ref={wrapRef}>
+        <canvas
+          ref={canvasRef}
+          style={{ touchAction: "manipulation", display: "block", width: "100%", height: "100%" }}
+          onPointerDown={handlePointer}
+        />
+      </div>
+      <div className="hint boardBelow">
         {props.state?.status === "playing"
           ? props.canInteract
-            ? "Your turn: click a valid cell."
+            ? "Your turn: tap a valid cell."
             : "Waiting for other player…"
           : "Start the game once at least 2 players joined."}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -586,6 +628,10 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 function clamp01(v: number) {
   return Math.max(0, Math.min(1, v));
+}
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
 }
 
 function cloneGrid(grid: Grid): Grid {
